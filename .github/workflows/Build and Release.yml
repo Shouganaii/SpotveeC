@@ -1,58 +1,84 @@
-name: Build SpotveeC IPA
+name: Build EeveeSpotify IPA
 
 on:
   workflow_dispatch:
     inputs:
-      SPOTIFY_IPA_URL:
-        description: 'URL to base Spotify IPA'
+      CHANGEVERSION:
+        description: 'Version of the patch'
         required: true
-      EEVEE_VERSION:
-        description: 'EeveeSpotify version to patch'
-        required: false
+        default: '1.0.0'
+
+env:
+  VANILLASPOTIFYVERSION: "8.8.94"
+  componentspath: "./BuildComponents"
+  spotifypath: "./Spotify.ipa"
+  orion: "./Orion.framework"
+  swiftprotobuf: "./SwiftProtobuf.framework"
+  eevee_arm: "./com.eevee.spotify_6.1.5_iphoneos-arm.deb"
+  eevee_arm64: "./com.eevee.spotify_6.1.5_iphoneos-arm64.deb"
 
 jobs:
   build:
     runs-on: macos-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Install Python & Cyan
-        run: |
-          brew install python
-          pip install --user cyan-patcher
-          brew install ldid  # Needed to sign IPA
+    - name: Set up environment
+      run: |
+        mkdir -p ${{ env.componentspath }}
 
-      - name: Download Spotify IPA
-        run: |
-          curl -LO ${{ github.event.inputs.SPOTIFY_IPA_URL }}
-          mv *.ipa base_spotify.ipa
+    - name: Download dependencies
+      run: |
+        curl -L -o "${{ env.eevee_arm }}" "https://example.com/path/to/com.eevee.spotify_6.1.5_iphoneos-arm.deb"
+        curl -L -o "${{ env.eevee_arm64 }}" "https://example.com/path/to/com.eevee.spotify_6.1.5_iphoneos-arm64.deb"
+        curl -L -o "${{ env.orion }}" "https://example.com/path/to/Orion.framework.zip"
+        curl -L -o "${{ env.swiftprotobuf }}" "https://example.com/path/to/SwiftProtobuf.framework.zip"
 
-      - name: Download EeveeSpotify
-        run: |
-          curl -LJO "https://github.com/whoeevee/EeveeSpotifyReborn/releases/latest/download/EeveeSpotify.iphoneos-arm64.deb"
+    - name: Extract Frameworks
+      run: |
+        unzip -o ${{ env.orion }} -d ${{ env.componentspath }}
+        unzip -o ${{ env.swiftprotobuf }} -d ${{ env.componentspath }}
 
-      - name: Download Dependencies (Orion + SwiftProtobuf)
-        run: |
-          curl -LJO "https://github.com/whoeevee/Orion/releases/latest/download/Orion.iphoneos-arm64.deb"
-          curl -LJO "https://github.com/whoeevee/SwiftProtobuf/releases/latest/download/SwiftProtobuf.iphoneos-arm64.deb"
+    - name: Patch Spotify IPA (Eevee)
+      run: |
+        echo "Patching Spotify IPA with Eevee..."
+        Cyan -i "${{ env.spotifypath }}" \
+             -o "${{ env.componentspath }}/SpotifyPatched.v${{ github.run_number }}.ipa" \
+             -f "${{ env.eevee_arm }}" \
+             -u -w
+        echo "patchedspotify=${{ env.componentspath }}/SpotifyPatched.v${{ github.run_number }}.ipa" >> $GITHUB_ENV
 
-      - name: Patch Spotify IPA with Cyan
-        run: |
-          mkdir -p patched
-          Cyan -i base_spotify.ipa \
-               -o patched/SpotveeC.ipa \
-               -f EeveeSpotify.iphoneos-arm64.deb \
-               -d Orion.iphoneos-arm64.deb \
-               -d SwiftProtobuf.iphoneos-arm64.deb \
-               -u -w
+    - name: Patch Spotify IPA (Alt)
+      run: |
+        echo "Creating Alt Patched Spotify..."
+        Cyan -i "${{ env.spotifypath }}" \
+             -o "${{ env.componentspath }}/SpotifyAltPatched.v${{ github.run_number }}.ipa" \
+             -f "${{ env.eevee_arm64 }}" \
+             -u -w
+        echo "altpatchedspotify=${{ env.componentspath }}/SpotifyAltPatched.v${{ github.run_number }}.ipa" >> $GITHUB_ENV
 
-      - name: Sign Patched IPA
-        run: |
-          ldid -S patched/SpotveeC.ipa
+    - name: Create Modded Spotify IPA
+      run: |
+        echo "Creating modded Spotify .ipa with Cyan..."
+        Cyan -i "${{ env.spotifypath }}" \
+             -o "${{ env.componentspath }}/SpotifyModded.v${{ github.run_number }}.ipa" \
+             -v ${{ github.run_number }} \
+             -f "${{ env.orion }}" "${{ env.swiftprotobuf }}" "${{ env.eevee_arm64 }}" \
+             -u -w
+        echo "moddedspotify=${{ env.componentspath }}/SpotifyModded.v${{ github.run_number }}.ipa" >> $GITHUB_ENV
 
-      - name: Upload Patched IPA
-        uses: actions/upload-artifact@v3
-        with:
-          name: SpotveeC-IPA
-          path: patched/SpotveeC.ipa
+    - name: Upload to Catbox
+      uses: actions/upload-artifact@v3
+      with:
+        name: Spotify Builds
+        path: ${{ env.componentspath }}/*.ipa
+
+    - name: Optional VirusTotal Scan
+      if: false  # Set to true if you have VT API key and want auto-scan
+      run: |
+        echo "Scanning IPA with VirusTotal..."
+        curl -X POST "https://www.virustotal.com/api/v3/files" \
+             -H "x-apikey: ${{ secrets.VT_API_KEY }}" \
+             -F "file=@${{ env.moddedspotify }}"
