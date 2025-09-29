@@ -106,9 +106,11 @@ jobs:
         ORIONVERSION=$(awk 'BEGIN{RS="";FS="\n"} $1~/^Package: dev.theos.orion14$/ && $0~/Architecture: iphoneos-arm64/{for(i=1;i<=NF;i++){if($i~/^Version: /){split($i,a," ");v=a[2];if(v>maxv||maxv==""){maxv=v}}}} END{print maxv}' Packages)
         FILENAME=$(awk 'BEGIN{RS="";FS="\n"} $1~/^Package: dev.theos.orion14$/ && $0~/Architecture: iphoneos-arm64/{for(i=1;i<=NF;i++){if($i~/^Filename: /){split($i,a," ");fn=a[2]}}} END{print fn}' Packages)
         SHA256=$(awk 'BEGIN{RS="";FS="\n"} $1~/^Package: dev.theos.orion14$/ && $0~/Architecture: iphoneos-arm64/{for(i=1;i<=NF;i++){if($i~/^SHA256: /){split($i,a," ");sha=a[2]}}} END{print sha}' Packages)
+        mkdir -p "Build Components"
         curl -LJO "https://repo.chariz.com/$FILENAME"
-        mv "$FILENAME" "Build Components/"
-        echo "orion=Build Components/$FILENAME" >> $GITHUB_ENV
+        BASENAME=$(basename "$FILENAME")
+        mv "$BASENAME" "Build Components/$BASENAME"
+        echo "orion=Build Components/$BASENAME" >> $GITHUB_ENV
         echo "ORIONVERSION=$ORIONVERSION" >> $GITHUB_ENV
         rm -f Packages
 
@@ -149,7 +151,6 @@ jobs:
         files: "${{ env.eevee-arm64 }}"
         vt_api_key: ${{ secrets.VIRUSTOTALKEY }}
 
-    # --- PATCH SPOTIFY IPA WITH CYAN ---
     - name: Patch Spotify IPA with Cyan
       run: |
         cyan patch \
@@ -167,19 +168,16 @@ jobs:
         files: "${{ env.patchedspotify }}"
         vt_api_key: ${{ secrets.VIRUSTOTALKEY }}
 
-    # --- UPLOAD TO CATBOX ---
     - name: Upload to Catbox
       if: ${{ env.CATBOXHASH_ENABLED == 'true' }}
       run: |
         catbox_url=$(curl -F "reqtype=fileupload" -F "userhash=${{ secrets.CATBOXHASH }}" -F "file=@${{ env.patchedspotify }}" https://catbox.moe/user/api.php)
         echo "CATBOX_URL=$catbox_url" >> $GITHUB_ENV
 
-    # --- GENERATE CHANGELOG ---
     - name: Generate Changelog
       run: |
         echo "CHANGELOG=Automated SpotveeC build: ${{ github.run_number }} - $(date '+%Y-%m-%d')" >> $GITHUB_ENV
 
-    # --- CREATE DRAFT RELEASE ---
     - name: Create Draft Release
       uses: softprops/action-gh-release@v1
       with:
