@@ -154,10 +154,10 @@ jobs:
     - name: Patch Spotify IPA with Cyan
       run: |
         cyan patch \
-          --ipa "${{ env.spotifypath }}" \
-          --deb "${{ env.eevee-arm64 }}" \
-          --orion "${{ env.orion }}" \
-          --output "Build Components/SpotifyPatched.ipa"
+          -i "${{ env.spotifypath }}" \
+          -f "${{ env.eevee-arm64 }}" \
+          -z "${{ env.orion }}" \
+          -o "Build Components/SpotifyPatched.ipa"
         echo "patchedspotify=Build Components/SpotifyPatched.ipa" >> $GITHUB_ENV
 
     - name: Upload Patched Spotify IPA to VirusTotal
