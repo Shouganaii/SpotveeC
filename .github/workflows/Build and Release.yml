@@ -77,11 +77,17 @@ jobs:
 
     - name: Download and verify Orion
       run: |
+        set -euo pipefail
         curl -sSL https://repo.chariz.com/Packages -o Packages
-        ORION_FILE=$(awk 'BEGIN{RS="";FS="\n"} $1~/^Package: dev.theos.orion14$/ && $0~/Architecture: iphoneos-arm64/{for(i=1;i<=NF;i++){if($i~/^Filename:/){print $2}}}' Packages | sort -r | head -n1)
+        ORION_FILE=$(awk 'BEGIN{RS="";FS="\n"} $1~/^Package: dev.theos.orion14$/ && $0~/Architecture: iphoneos-arm64/ {for(i=1;i<=NF;i++){if($i~/^Filename:/){gsub(/^[ \t]+|[ \t]+$/,"",$2); print $2}}}' Packages | sort -r | head -n1)
+        if [ -z "$ORION_FILE" ]; then
+          echo "❌ Orion package not found!"
+          rm -f Packages
+          exit 1
+        fi
         curl -LJO "https://repo.chariz.com/$ORION_FILE"
-        mv "$(basename $ORION_FILE)" "Build Components/"
-        echo "orion=Build Components/$(basename $ORION_FILE)" >> $GITHUB_ENV
+        mv "$(basename "$ORION_FILE")" "Build Components/"
+        echo "orion=Build Components/$(basename "$ORION_FILE")" >> $GITHUB_ENV
         rm -f Packages
 
     - name: Download EeveeSpotify .deb
