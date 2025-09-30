@@ -10,16 +10,18 @@ on:
         description: 'SpotveeC Version Number'
         required: false
       USEACTIONSEEVEE:
-        description: 'Get EeveeSpotify from latest EeveeSpotfiy build action'
+        description: 'Get EeveeSpotify from latest EeveeSpotify build action'
         required: true
         default: false
         type: boolean
       EEVEEVERSION:
-        description: 'EeveeSpotify Version'
+        description: 'EeveeSpotify Version (tag to fetch from release)'
         required: false
+        default: "6.1.5"
       EEVEEREPO:
         description: 'Override the repo for EeveeSpotify'
         required: false
+        default: "whoeevee/EeveeSpotifyReborn"
 
 jobs:
   build:
@@ -29,20 +31,11 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Set up variables
-      id: setup
       run: |
         echo "EEVEEVERSION=${{ github.event.inputs.EEVEEVERSION }}" >> $GITHUB_ENV
         echo "CHANGEVERSION=${{ github.event.inputs.CHANGEVERSION }}" >> $GITHUB_ENV
         echo "SPOTURL=${{ github.event.inputs.SPOTURL }}" >> $GITHUB_ENV
-
-    - name: Set EeveeSpotify Repo
-      run: |
-        if [ -n "${{ github.event.inputs.EEVEEREPO }}" ]; then
-          EEVEEREPO=$(echo "${{ github.event.inputs.EEVEEREPO }}" | sed -E 's|https://github.com/([^/]+)/([^/]+)|\1/\2|')
-        else
-          EEVEEREPO="whoeevee/EeveeSpotifyReborn"
-        fi
-        echo "EEVEEREPO=$EEVEEEREPO" >> $GITHUB_ENV
+        echo "EEVEEREPO=${{ github.event.inputs.EEVEEREPO }}" >> $GITHUB_ENV
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -63,11 +56,20 @@ jobs:
 
     - name: Download EeveeSpotify .deb
       run: |
+        echo "Fetching EeveeSpotify from $EEVEEREPO at tag $EEVEEVERSION"
         eevee_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/latest | \
-          jq -r '.assets[] | select(.name | endswith("iphoneos-arm64.deb")).browser_download_url')
+          https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEEVERSION }} \
+          | jq -r '.assets[] | select(.name | startswith("com.eevee.spotify") and endswith("iphoneos-arm64.deb")).browser_download_url')
+
+        if [ -z "$eevee_asset" ] || [ "$eevee_asset" == "null" ]; then
+          echo "❌ No matching EeveeSpotify asset found in release $EEVEEVERSION"
+          exit 1
+        fi
+
+        echo "Downloading From: $eevee_asset"
         curl -LJO "$eevee_asset"
-        downloaded_file=$(ls -t | head -n1)
+        downloaded_file=$(ls -t com.eevee.spotify*arm64.deb | head -n1)
+        mkdir -p "Build Components"
         mv "$downloaded_file" "Build Components/"
         echo "eevee-arm64=Build Components/$downloaded_file" >> $GITHUB_ENV
 
