@@ -4,106 +4,87 @@ on:
   workflow_dispatch:
     inputs:
       SPOTURL:
-        description: "Spotify IPA URL"
+        description: 'Direct URL to Spotify .ipa'
         required: true
-        type: string
       CHANGEVERSION:
-        description: "Custom version number (optional)"
+        description: 'SpotveeC Version Number'
         required: false
-        type: string
       USEACTIONSEEVEE:
-        description: "Use EeveeSpotify build action?"
-        required: false
+        description: 'Get EeveeSpotify from latest EeveeSpotfiy build action'
+        required: true
+        default: false
         type: boolean
-        default: true
       EEVEEVERSION:
-        description: "Specific EeveeSpotify version (optional)"
+        description: 'EeveeSpotify Version'
         required: false
-        type: string
       EEVEEREPO:
-        description: "EeveeSpotify repo (optional)"
+        description: 'Override the repo for EeveeSpotify'
         required: false
-        type: string
-        default: "whoeevee/EeveeSpotifyReborn"
 
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        brew install jq
-        python3 -m pip install --upgrade pip
-        pipx install Cyan || pipx upgrade Cyan
+      - name: Set up variables
+        run: |
+          echo "EEVEEVERSION=${{ github.event.inputs.EEVEEVERSION }}" >> $GITHUB_ENV
+          echo "CHANGEVERSION=${{ github.event.inputs.CHANGEVERSION }}" >> $GITHUB_ENV
+          echo "SPOTURL=${{ github.event.inputs.SPOTURL }}" >> $GITHUB_ENV
+          echo "VT_ENABLED=${{ secrets.VIRUSTOTALKEY != '' }}" >> $GITHUB_ENV
+          echo "CATBOXHASH_ENABLED=${{ secrets.CATBOXHASH != '' }}" >> $GITHUB_ENV
+          echo "WORKFLOWURL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
 
-    - name: Set variables
-      id: vars
-      run: |
-        SPOTURL="${{ github.event.inputs.SPOTURL }}"
-        CHANGEVERSION="${{ github.event.inputs.CHANGEVERSION }}"
-        USEACTIONSEEVEE="${{ github.event.inputs.USEACTIONSEEVEE }}"
-        EEVEEVERSION="${{ github.event.inputs.EEVEEVERSION }}"
-        EEVEEREPO="${{ github.event.inputs.EEVEEREPO }}"
-        echo "SPOTURL=$SPOTURL" >> $GITHUB_ENV
-        echo "CHANGEVERSION=$CHANGEVERSION" >> $GITHUB_ENV
-        echo "USEACTIONSEEVEE=$USEACTIONSEEVEE" >> $GITHUB_ENV
-        echo "EEVEEVERSION=$EEVEEVERSION" >> $GITHUB_ENV
-        echo "EEVEEREPO=$EEVEEREPO" >> $GITHUB_ENV
+      - name: Set EeveeSpotify Repo
+        run: |
+          if [[ "${{ github.event.inputs.EEVEEREPO }}" != "" ]]; then
+            EEVEEREPO=$(echo "${{ github.event.inputs.EEVEEREPO }}" | sed -E 's|https://github.com/([^/]+)/([^/]+)|\1/\2|')
+          else
+            EEVEEREPO="whoeevee/EeveeSpotifyReborn"
+          fi
+          echo "EEVEEREPO=$EEVEEREPO" >> $GITHUB_ENV
 
-    - name: Download Spotify IPA
-      run: |
-        echo "Downloading From: ${{ github.event.inputs.SPOTURL }}"
-        # Download the file using curl
-        curl -LJO "${{ github.event.inputs.SPOTURL }}"
-        downloaded_file=$(ls -t | head -n1)
-        mkdir -p "Build Components"
-        mv "$downloaded_file" "Build Components/"
-        echo "spotifypath=Build Components/$downloaded_file" >> $GITHUB_ENV
-      env:
-        SPOTURL: ${{ github.event.inputs.SPOTURL }}
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
-    - name: Decrypt IPA (if needed)
-      run: |
-        # Placeholder: Add your decryption commands here if required
-        echo "Decrypt step skipped"
+      - name: Install Cyan
+        run: pipx install --force https://github.com/SpotCompiled/pyzule-rw/archive/main.zip
 
-    - name: Build EeveeSpotify (if enabled)
-      if: ${{ env.USEACTIONSEEVEE == 'true' }}
-      run: |
-        git clone https://github.com/${EEVEEREPO}.git eevee
-        cd eevee
-        if [ -n "$EEVEEVERSION" ]; then
-          git checkout $EEVEEVERSION
-        fi
-        # Run Eevee build command
-        echo "Building EeveeSpotify..."
-        # Add your actual build command here
+      - name: Set EEVEETAG
+        run: |
+          if [[ "${{ github.event.inputs.EEVEEVERSION }}" == "" ]]; then
+            EEVEETAG=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/latest | jq -r .tag_name)
+          else
+            EEVEEVERSION="${{ github.event.inputs.EEVEEVERSION }}"
+            EEVEETAG=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/tags | jq -r --arg v "$EEVEEVERSION" '.[] | select(.name | contains($v)) | .name' | head -n1)
+          fi
+          if [[ -z "$EEVEETAG" ]]; then
+            echo "No matching tag found!"
+            exit 1
+          fi
+          echo "EEVEETAG=$EEVEETAG" >> $GITHUB_ENV
 
-    - name: Update version
-      run: |
-        if [ -z "$CHANGEVERSION" ]; then
-          NEWVER=$(date +'%Y.%m.%d.%H%M')
-        else
-          NEWVER=$CHANGEVERSION
-        fi
-        echo "New version: $NEWVER"
-        echo "VERSION=$NEWVER" >> $GITHUB_ENV
+      - name: Create Build Components folder
+        run: mkdir -p "Build Components"
 
-    - name: Upload IPA to Catbox (optional)
-      if: secrets.CATBOXHASH != ''
-      run: |
-        curl -F "reqtype=fileupload" -F "userhash=$CATBOXHASH" -F "file=@${{ env.spotifypath }}" https://catbox.moe/user/api.php
+      - name: Download Spotify IPA
+        run: |
+          curl -LJO "${{ github.event.inputs.SPOTURL }}"
+          downloaded_file=$(ls -t *.ipa | head -n1)
+          mv "$downloaded_file" "Build Components/"
+          echo "spotifypath=Build Components/$downloaded_file" >> $GITHUB_ENV
 
-    - name: VirusTotal Scan (optional)
-      if: secrets.VIRUSTOTALKEY != ''
-      run: |
-        curl -s -X POST "https://www.virustotal.com/api/v3/files" \
-          -H "x-apikey: $VIRUSTOTALKEY" \
-          -F "file=@${{ env.spotifypath }}"
+      # ... keep your Orion, EeveeSpotify, SwiftProtobuf download and VirusTotal steps ...
 
-    - name: Complete
-      run: echo "Build and release workflow completed successfully."
+      - name: Run Cyan Patch
+        run: |
+          Cyan -i "${{ env.spotifypath }}" \
+               -o "${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa" \
+               -v ${{ env.CHANGEVERSION }} \
+               -f "${{ env.orion }}" "${{ env.swiftprotobuf }}" "${{ env.eevee-arm64 }}" \
+               -u -w
+          echo "patchedspotify=${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa" >> $GITHUB_ENV
