@@ -1,28 +1,14 @@
-name: SpotveeC Patch with Cyan Integration
+name: Build and Release Patched Spotify IPA
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      SPOTURL:
-        description: 'URL to the vanilla Spotify IPA'
-        required: true
-        type: string
-      CHANGEVERSION:
-        description: 'Optional SpotveeC version'
-        required: false
-        type: string
-      USEACTIONSEEVEE:
-        description: 'Use EeveeSpotify from GitHub Actions artifacts'
-        required: true
-        type: boolean
-      EEVEEVERSION:
-        description: 'EeveeSpotify version'
-        required: false
-        type: string
-      EEVEEREPO:
-        description: 'EeveeSpotify repository'
-        required: false
-        type: string
+
+env:
+  PATCHED_SPOTIFY: patched/Spotify.ipa
+  ALT_PATCHED_SPOTIFY: patched/AltSpotify.ipa
 
 jobs:
   build:
@@ -31,55 +17,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.13
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.13'
+          python-version: 3.11
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install pipx
-          pipx install --force https://github.com/SpotCompiled/pyzule-rw/archive/main.zip
+          pip install -r requirements.txt
 
-      - name: Set environment variables
+      - name: Run Cyan patch script
         run: |
-          echo "SPOTURL=${{ github.event.inputs.SPOTURL }}" >> $GITHUB_ENV
-          echo "CHANGEVERSION=${{ github.event.inputs.CHANGEVERSION }}" >> $GITHUB_ENV
-          echo "USEACTIONSEEVEE=${{ github.event.inputs.USEACTIONSEEVEE }}" >> $GITHUB_ENV
-          echo "EEVEEVERSION=${{ github.event.inputs.EEVEEVERSION }}" >> $GITHUB_ENV
-          echo "EEVEEREPO=${{ github.event.inputs.EEVEEREPO }}" >> $GITHUB_ENV
-
-      - name: Download and verify components
-        run: |
-          # Download and verify Spotify IPA
-          curl -L -o spotify.ipa $SPOTURL
-          # Add verification steps as needed
-
-          # Download and verify EeveeSpotify .deb
-          if [ "$USEACTIONSEEVEE" = "true" ]; then
-            curl -L -o eeveespotify.deb "https://github.com/${EEVEEREPO}/releases/download/${EEVEEVERSION}/eeveespotify.deb"
-          else
-            curl -L -o eeveespotify.deb "https://github.com/EeveeSpotify/EeveeSpotify/releases/download/${EEVEEVERSION}/eeveespotify.deb"
-          fi
-          # Add verification steps as needed
-
-      - name: Apply Cyan patch
-        run: |
-          python -m pyzule.main patch \
-            --ipa spotify.ipa \
-            --deb eeveespotify.deb \
-            --output patched_spotify.ipa
-
-      - name: Upload patched IPA
-        uses: actions/upload-artifact@v3
-        with:
-          name: patched-spotify-ipa
-          path: patched_spotify.ipa
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: patched_spotify.ipa
+          python patch_spotify.py
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_IPA: path/to/spotify.ipa
+          OUTPUT_IPA: ${{ env.PATCHED_SPOTIFY }}
+
+      - name: Run Alternative Patch (optional)
+        run: |
+          python alt_patch_spotify.py
+        env:
+          INPUT_IPA: path/to/spotify.ipa
+          OUTPUT_IPA: ${{ env.ALT_PATCHED_SPOTIFY }}
+
+      - name: Create Release Folder and Move IPAs
+        run: |
+          mkdir -p release
+          mv "${{ env.PATCHED_SPOTIFY }}" release/
+          mv "${{ env.ALT_PATCHED_SPOTIFY }}" release/
+          echo "Release folder created and IPAs moved."
+          echo "PATCHED_SPOTIFY_IPA=release/$(basename ${{ env.PATCHED_SPOTIFY }})" >> $GITHUB_ENV
+          echo "ALT_PATCHED_SPOTIFY_IPA=release/$(basename ${{ env.ALT_PATCHED_SPOTIFY }})" >> $GITHUB_ENV
+
+      - name: Upload Patched IPAs as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Patched Spotify IPAs
+          path: release/
+
+      - name: Show Patched Spotify IPA Link
+        run: |
+          echo "Patched Spotify IPA is located at: ${{ env.PATCHED_SPOTIFY_IPA }}"
+          echo "AltStore Patched Spotify IPA is located at: ${{ env.ALT_PATCHED_SPOTIFY_IPA }}"
