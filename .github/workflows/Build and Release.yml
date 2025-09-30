@@ -532,7 +532,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Set release tag dynamically from the IPA filename
-      - name: Set release tag dynamically
+     - name: Set release tag dynamically
         id: set_tag
         run: |
           for FILE in Build\ Components/*.ipa; do
@@ -540,9 +540,7 @@ jobs:
             TAG="${BASENAME#SpotveeC.}"
             echo "Found IPA: $FILE, setting release tag: $TAG"
             echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
-            break
-          done
-
+ 
       # Upload all IPA files to GitHub Release
       - name: Upload Patched Spotify IPA to Release Artifacts
         uses: softprops/action-gh-release@v2
