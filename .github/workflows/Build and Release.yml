@@ -531,14 +531,27 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Upload Patched Spotify IPA to Release Artifacts
-      uses: softprops/action-gh-release@v2
-      with:
-        files: |
-          ${{ env.patchedspotify }}
-          ${{ env.altpatchedspotify }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Set release tag dynamically from the IPA filename
+      - name: Set release tag dynamically
+        id: set_tag
+        run: |
+          for FILE in Build\ Components/*.ipa; do
+            BASENAME=$(basename "$FILE" .ipa)
+            TAG="${BASENAME#SpotveeC.}"
+            echo "Found IPA: $FILE, setting release tag: $TAG"
+            echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+            break
+          done
+
+      # Upload all IPA files to GitHub Release
+      - name: Upload Patched Spotify IPA to Release Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: Build\ Components/*.ipa
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Download AltStore Repo.json
       run: curl "https://raw.githubusercontent.com/SpotCompiled/SpotC-AltStore-Repo/main/AltStore%20Repo.json" -o ./AltStoreRepo.json
