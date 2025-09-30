@@ -1,76 +1,82 @@
-name: Create Patched Spotify IPA
+name: Create Cyan IPA Package
 
 on:
   workflow_dispatch:
     inputs:
       ipa_url:
-        description: "Direct URL to decrypted Spotify IPA"
+        description: "URL to the decrypted IPA file"
         required: true
-      eevee_url:
-        description: "Direct URL to EeveeSpotify .deb"
+        type: string
+      cyan_url:
+        description: "URL to the Cyan tweak file (.deb)"
         required: true
-      swift_url:
-        description: "Direct URL to SwiftProtobuf .deb (arm64)"
-        required: true
-      change_version:
-        description: "Custom version label (optional)"
-        required: false
+        type: string
 
 jobs:
   build:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set Vars
-        run: |
-          echo "IPAURL=${{ github.event.inputs.ipa_url }}" >> $GITHUB_ENV
-          echo "EEVEEURL=${{ github.event.inputs.eevee_url }}" >> $GITHUB_ENV
-          echo "SWIFTURL=${{ github.event.inputs.swift_url }}" >> $GITHUB_ENV
-          echo "CHANGEVERSION=${{ github.event.inputs.change_version }}" >> $GITHUB_ENV
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: maxim-lobanov/setup-xcode@v1
         with:
-          python-version: '3.13'
+          xcode-version: latest
 
-      - name: Install Cyan (pyzule-rw)
-        run: pipx install --force https://github.com/SpotCompiled/pyzule-rw/archive/main.zip
+      - name: Hide Sensitive Inputs
+        uses: levibostian/action-hide-sensitive-inputs@v1
 
-      - name: Download Spotify IPA
+      - name: Download and Validate IPA
         run: |
-          curl -L "${IPAURL}" -o spotify.ipa
-          echo "spotify.ipa downloaded"
+          wget "${{ inputs.ipa_url }}" --no-verbose -O ${{ github.workspace }}/base.ipa
+          file_type=$(file --mime-type -b ${{ github.workspace }}/base.ipa)
+          if [[ "$file_type" != "application/x-ios-app" && "$file_type" != "application/zip" ]]; then
+            echo "::error::Validation failed: The downloaded file is not a valid IPA. Detected type: $file_type."
+            exit 1
+          fi
 
-      - name: Download EeveeSpotify deb
+      - name: Download and Validate Cyan tweak
         run: |
-          curl -L "${EEVEEURL}" -o eevee.deb
-          echo "eevee.deb downloaded"
+          wget "${{ inputs.cyan_url }}" --no-verbose -O ${{ github.workspace }}/cyan.deb
+          file_type=$(file --mime-type -b ${{ github.workspace }}/cyan.deb)
+          if [[ "$file_type" != "application/vnd.debian.binary-package" ]]; then
+            echo "::error::Validation failed: The file is not a valid DEB file. Detected type: $file_type."
+            exit 1
+          fi
 
-      - name: Download SwiftProtobuf deb
+      - name: Setup ivinject
         run: |
-          curl -L "${SWIFTURL}" -o swiftprotobuf.deb
-          echo "swiftprotobuf.deb downloaded"
+          git clone https://github.com/whoeevee/ivinject.git
+          cp -r ./ivinject/KnownFrameworks ~/.ivinject
+          wget https://github.com/whoeevee/ivinject/releases/download/first/ivinject-arm64
+          sudo mv ivinject-arm64 /usr/local/bin/ivinject-arm64
+          sudo chmod +x /usr/local/bin/ivinject-arm64
 
-      - name: Patch Spotify with Cyan
+      - name: Setup ipapatch
         run: |
-          cyan spotify.ipa \
-            -i eevee.deb swiftprotobuf.deb \
-            -o spotify-eevee.ipa \
-            --level Optimal
-          echo "Patched IPA created: spotify-eevee.ipa"
+          wget https://github.com/asdfzxcvbn/ipapatch/releases/download/v2.1.0/ipapatch.macos-arm64
+          sudo mv ipapatch.macos-arm64 /usr/local/bin/ipapatch
+          sudo chmod +x /usr/local/bin/ipapatch
+
+      - name: Inject Cyan tweak
+        run: |
+          ivinject-arm64 base.ipa Cyan.ipa \
+            -i cyan.deb \
+            -s - -d --level Optimal
+
+      - name: Patch Cyan IPA
+        run: ipapatch -input Cyan.ipa -output Cyan-patched.ipa
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.CHANGEVERSION || github.run_number }}
-          name: "Patched Spotify v${{ env.CHANGEVERSION || github.run_number }}"
-          draft: true
+          tag_name: cyan-${{ github.run_number }}
+          name: Cyan IPA (${{ github.run_number }})
           files: |
-            spotify.ipa
-            spotify-eevee.ipa
+            Cyan.ipa
+            Cyan-patched.ipa
+          draft: true
 
-      - name: Release URL
-        run: echo "::notice::Release ready: https://github.com/${{ github.repository }}/releases"
+      - name: Output Release URL
+        run: |
+          echo "::notice::Release available at: https://github.com/${{ github.repository }}/releases"
