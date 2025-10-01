@@ -1,4 +1,4 @@
-name: Build & Release SpotveeC
+name: Build and Release
 
 on:
   push:
@@ -7,93 +7,63 @@ on:
   workflow_dispatch:
 
 env:
-  CHANGEVERSION: 1.0.0  # Update dynamically if needed
-  VANILLASPOTIFYVERSION: 8.9.59
-  componentspath: ./build
+  CHANGEVERSION: 1.0.0
+  patchedspotify: "SpotveeC.ipa"
+  altpatchedspotify: "SpotveeC_alt.ipa"
 
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
+      - name: Set up environment
+        run: |
+          echo "Setting up tools..."
+          # Install required tools here
 
-    - name: Install Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Download Spotify/Eevee/Orion
+        run: |
+          echo "Downloading necessary files..."
+          # Include your download commands
 
-    # -----------------------------
-    # Download Vanilla Spotify
-    # -----------------------------
-    - name: Download Vanilla Spotify
-      run: |
-        mkdir -p ${{ env.componentspath }}
-        # Add your download script or curl command here
+      - name: Run Cyan build
+        run: |
+          echo "Running Cyan to patch Spotify..."
+          # Include your Cyan commands here
 
-    # -----------------------------
-    # EeveeSpotify patching
-    # -----------------------------
-    - name: Patch with EeveeSpotify
-      run: |
-        # Your EeveeSpotify patching commands
-        echo "Patching Spotify..."
+      - name: Generate changelog
+        run: |
+          echo "Generating changelog..."
+          # Your changelog generation script here
 
-    # -----------------------------
-    # Orion & SwiftProtobuf
-    # -----------------------------
-    - name: Orion & SwiftProtobuf Patch
-      run: |
-        # Your Orion and SwiftProtobuf patch commands
-        echo "Applying Orion & SwiftProtobuf patch..."
+      - name: Upload to VirusTotal
+        run: |
+          echo "Uploading patched IPA to VirusTotal..."
+          # VirusTotal upload commands
 
-    # -----------------------------
-    # Cyan patch
-    # -----------------------------
-    - name: Cyan Patch
-      run: |
-        # Cyan patch commands
-        echo "Applying Cyan patch..."
+      - name: Upload to Catbox
+        run: |
+          echo "Uploading patched IPA to Catbox..."
+          # Catbox upload commands
 
-    # -----------------------------
-    # Upload IPA as GitHub artifact
-    # -----------------------------
-    - name: Upload Patched Spotify as Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: SpotveeC-v${{ env.CHANGEVERSION }}-v${{ env.VANILLASPOTIFYVERSION }}
-        path: ${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa
+      - name: Create Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ env.CHANGEVERSION }}"
+          name: "SpotveeC v${{ env.CHANGEVERSION }}"
+          draft: true
+          body_path: changelog.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # -----------------------------
-    # Create Draft GitHub Release
-    # -----------------------------
-    - name: Create Draft Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: "v${{ env.CHANGEVERSION }}"
-        name: "SpotveeC v${{ env.CHANGEVERSION }}"
-        draft: true
-        body_path: changelog.txt
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload IPA to Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    # -----------------------------
-    # Optional: VirusTotal Scan
-    # -----------------------------
-    - name: VirusTotal Scan
-      run: |
-        # Your VirusTotal scan commands
-        echo "Scanning IPA..."
+      - name: Upload Patched Spotify IPA to Release Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ env.CHANGEVERSION }}"
+          files: |
+            ${{ env.patchedspotify }}
+            ${{ env.altpatchedspotify }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
