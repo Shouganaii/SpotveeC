@@ -179,3 +179,9 @@ jobs:
         Cyan -i "${{ env.spotifypath }}" -o "${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa" -v ${{ env.CHANGEVERSION }} -f "${{ env.swiftprotobuf }}" "${{ env.eevee-arm64 }}" -u -w
         echo "patchedspotify=${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa" >> $GITHUB_ENV
         echo "Patched Spotify .ipa Located: ${{ env.patchedspotify }}"
+   
+    - name: Upload Patched Spotify IPA as Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: SpotveeC-Patched-IPA
+        path: ${{ env.patchedspotify }}
