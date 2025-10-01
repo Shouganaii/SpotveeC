@@ -173,4 +173,9 @@ jobs:
     - name: Create Draft Release
       uses: softprops/action-gh-release@v2
       with:
-        ta
+        tag_name: "v${{ env.CHANGEVERSION }}"
+        name: "SpotveeC v${{ env.CHANGEVERSION }}"
+        draft: true
+        body_path: changelog.txt
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
