@@ -127,19 +127,29 @@ jobs:
         files: "${{ env.orion }}"
         vt_api_key: ${{ secrets.VIRUSTOTALKEY }}
 
-    - name: Download EeveeSpotify .deb
+    - name: Download EeveeSpotify .deb from artifacts
+      if: ${{ github.event.inputs.USEACTIONSEEVEE == 'true' }}
       run: |
-        if [ "${{ github.event.inputs.USEACTIONSEEVEE }}" = "false" ]; then
-          eevee_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEETAG }} | jq -r '.assets[] | select(.name | startswith("com.eevee.spotify") and endswith("iphoneos-arm64.deb")).browser_download_url')
-        else
-          workflow_run_id=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ env.EEVEEREPO }}/actions/workflows/build-swift.yml/runs?status=success&per_page=1" | jq -r '.workflow_runs[0].id')
-          eevee_asset=$(curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ env.EEVEEREPO }}/actions/runs/$workflow_run_id/artifacts" | jq -r '.artifacts[] | select(.name | test("debug|arm.deb") | not) | .archive_download_url')
-          curl -LJ -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$eevee_asset" -o "eeveespotfiyactionsasset.zip"
-          unzip -q "eeveespotfiyactionsasset.zip" -d extracted_files
-          eevee_asset=$(find extracted_files -type f -name "*.deb" | head -n1)
-        fi
-        mv "$eevee_asset" "${{ env.componentspath }}/"
-        echo "eeveespotify=${{ env.componentspath }}/$(basename $eevee_asset)" >> $GITHUB_ENV
+        workflow_run_id=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ env.EEVEEREPO }}/actions/workflows/build-swift.yml/runs?status=success&per_page=1" | jq -r '.workflow_runs[0].id')
+        echo "Workflow ID: $workflow_run_id"
+        eevee_asset=$(curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/actions/runs/$workflow_run_id/artifacts | jq -r '.artifacts[] | select(.name | test("debug|arm.deb") | not) | .archive_download_url')
+        echo "Downloading From: $eevee_asset"
+        curl -LJ -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$eevee_asset" -o "eeveespotfiyactionsasset.zip"
+        unzip -q "eeveespotfiyactionsasset.zip" -d extracted_files
+        downloaded_file=$(find extracted_files -type f -name "*.deb" -print -quit)
+        mv "$downloaded_file" "${{ env.componentspath }}/"
+        rm -rf extracted_files
+        echo "eevee-arm64=${{ env.componentspath }}/$(basename "$downloaded_file")" >> $GITHUB_ENV
+        echo "eeveeAssetLink=$eevee_asset" >> $GITHUB_ENV
+
+    - name: Download EeveeSpotify .deb from releases
+      if: ${{ github.event.inputs.USEACTIONSEEVEE == 'false' }}
+      run: |
+        eevee_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEETAG }} | jq -r '.assets[] | select(.name | startswith("com.eevee.spotify") and endswith("iphoneos-arm64.deb")).browser_download_url')
+        curl -LJO "$eevee_asset"
+        downloaded_file=$(ls -t | head -n1)
+        mv "$downloaded_file" "${{ env.componentspath }}/"
+        echo "eevee-arm64=${{ env.componentspath }}/$downloaded_file" >> $GITHUB_ENV
 
     - name: Run Cyan
       run: |
@@ -163,9 +173,4 @@ jobs:
     - name: Create Draft Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: "v${{ env.CHANGEVERSION }}"
-        name: "SpotveeC v${{ env.CHANGEVERSION }}"
-        draft: true
-        body_path: changelog.txt
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ta
