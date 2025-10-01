@@ -1,75 +1,168 @@
-name: Build & Patch Spotify IPA
+name: Build and Release SpotveeC
 
 on:
   workflow_dispatch:
-
-env:
-  CHANGEVERSION: 6.1.5
-  VANILLASPOTIFYVERSION: 6.1.5
-  patchedspotify: Build/SpotveeC_v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa
-  altpatchedspotify: Build/SpotveeC_v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}_ALTSTORESOURCE_ONLY.ipa
+    inputs:
+      SPOTURL:
+        description: 'Direct URL to Spotify .ipa'
+        required: true
+      CHANGEVERSION:
+        description: 'SpotveeC Version Number'
+        required: false
+      USEACTIONSEEVEE:
+        description: 'Get EeveeSpotify from latest EeveeSpotify build action'
+        required: true
+        default: false
+        type: boolean
+      EEVEEVERSION:
+        description: 'EeveeSpotify Version'
+        required: false
+      EEVEEREPO:
+        description: 'Override the repo for EeveeSpotify'
+        required: false
 
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Set up environment variables
+      id: setup
+      run: |
+        echo "EEVEEVERSION=${{ github.event.inputs.EEVEEVERSION }}" >> $GITHUB_ENV
+        echo "CHANGEVERSION=${{ github.event.inputs.CHANGEVERSION }}" >> $GITHUB_ENV
+        echo "SPOTURL=${{ github.event.inputs.SPOTURL }}" >> $GITHUB_ENV
+        echo "VT_ENABLED=${{ secrets.VIRUSTOTALKEY != '' }}" >> $GITHUB_ENV
+        echo "CATBOXHASH_ENABLED=${{ secrets.CATBOXHASH != '' }}" >> $GITHUB_ENV
+        echo "WORKFLOWURL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
+
+    - name: Set EeveeSpotify Repo
+      run: |
+        if [ -n "${{ github.event.inputs.EEVEEREPO }}" ]; then
+          echo "EEVEEREPO=$(echo "${{ github.event.inputs.EEVEEREPO }}" | sed -E 's|https://github.com/([^/]+)/([^/]+)|\1/\2|')" >> $GITHUB_ENV
+        else
+          echo "EEVEEREPO=whoeevee/EeveeSpotifyReborn" >> $GITHUB_ENV
+        fi
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.11
+        python-version: '3.13'
 
-    - name: Install Dependencies
+    - name: Install Cyan
+      run: pipx install --force https://github.com/SpotCompiled/pyzule-rw/archive/main.zip
+
+    - name: Determine EeveeSpotify Tag
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        if [ -z "${{ github.event.inputs.EEVEEVERSION }}" ]; then
+          EEVEETAG=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/latest | jq -r .tag_name)
+          echo "EEVEETAG=$EEVEETAG" >> $GITHUB_ENV
+        else
+          EEVEEVERSION="${{ github.event.inputs.EEVEEVERSION }}"
+          tags=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/tags | jq -r '.[].name')
+          for tag in $tags; do
+            if [[ $tag == *"$EEVEEVERSION"* ]]; then
+              echo "EEVEETAG=$tag" >> $GITHUB_ENV
+              exit 0
+            fi
+          done
+          echo "No matching tag found for EEVEEVERSION=$EEVEEVERSION"
+          exit 1
+        fi
 
-    - name: Create Release folder
-      run: mkdir -p Release
+    - name: Create Build Components folder
+      run: mkdir -p "Build Components"
 
-    - name: Build Vanilla Spotify IPA
+    - name: Download Spotify IPA
       run: |
-        # Your build command here
-        echo "Building vanilla Spotify IPA..."
-        # Assume output: Build/SpotveeC_v${{ env.CHANGEVERSION }}.ipa
+        curl -LJO "${{ github.event.inputs.SPOTURL }}"
+        downloaded_file=$(ls -t | head -n1)
+        mv "$downloaded_file" "Build Components/"
+        echo "spotifypath=Build Components/$downloaded_file" >> $GITHUB_ENV
 
-    - name: Run Cyan Patch
+    - name: Download Orion Runtime and verify hashes
       run: |
-        # Run your patching script
-        python cyan_patch.py --input Build/Spotify_${{ env.VANILLASPOTIFYVERSION }}.ipa --output "${{ env.patchedspotify }}"
-        python cyan_patch.py --alt --input Build/Spotify_${{ env.VANILLASPOTIFYVERSION }}.ipa --output "${{ env.altpatchedspotify }}"
+        curl -sSL https://repo.chariz.com/Packages -o Packages
+        ORIONVERSION=$(awk '...' Packages) # Simplified extraction
+        FILENAME=$(awk '...' Packages)
+        SHA256=$(awk '...' Packages)
+        MD5=$(awk '...' Packages)
+        curl -LJO "https://repo.chariz.com/$FILENAME"
+        mv "$FILENAME" "Build Components/"
+        echo "orion=Build Components/$FILENAME" >> $GITHUB_ENV
+        rm -f Packages
 
-    - name: Copy Patched IPA to Release folder
+    - name: Download EeveeSpotify
       run: |
-        cp "${{ env.patchedspotify }}" "Release/$(basename "${{ env.patchedspotify }}")"
-        cp "${{ env.altpatchedspotify }}" "Release/$(basename "${{ env.altpatchedspotify }}")"
-        echo "Patched IPA(s) copied to Release folder"
+        if [ "${{ github.event.inputs.USEACTIONSEEVEE }}" == "true" ]; then
+          # Download from workflow artifacts
+          ...
+        else
+          eevee_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEETAG }} | jq -r '.assets[] | select(.name | endswith("iphoneos-arm64.deb")).browser_download_url')
+          curl -LJO "$eevee_asset"
+          mv $(ls -t | head -n1) "Build Components/"
+          echo "eevee-arm64=Build Components/$(ls -t | head -n1)" >> $GITHUB_ENV
+        fi
 
-    - name: Upload Release folder as Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: PatchedSpotifyIPA
-        path: Release/
-
-    - name: Optional: Upload to Catbox
+    - name: Download SwiftProtobuf
       run: |
-        echo "Uploading patched IPA to Catbox..."
-        # curl command or upload script here
+        protobuf_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEETAG }} | jq -r '.assets[] | select(.name | startswith("org.swift.protobuf.swiftprotobuf")).browser_download_url')
+        curl -LJO "$protobuf_asset"
+        mv $(ls -t | head -n1) "Build Components/"
+        echo "swiftprotobuf=Build Components/$(ls -t | head -n1)" >> $GITHUB_ENV
 
-    - name: Optional: VirusTotal Scan
+    - name: Extract Spotify Info
       run: |
-        echo "Scanning patched IPA on VirusTotal..."
-        # vt-py or API command here
+        cp "${{ env.spotifypath }}" "Build Components/SpotifyAnalysis.zip"
+        unzip "Build Components/SpotifyAnalysis.zip" -d "Build Components"
+        cd Build\ Components
+        cp Payload/Spotify.app/Info.plist Info.plist
+        VANILLASPOTIFYVERSION=$(/usr/libexec/PlistBuddy -c "Print :SpotifyVersionShort" Info.plist)
+        echo "VANILLASPOTIFYVERSION=$VANILLASPOTIFYVERSION" >> $GITHUB_ENV
+        MIN_IOS_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' Info.plist)
+        echo "MIN_IOS_VERSION=$MIN_IOS_VERSION" >> $GITHUB_ENV
+        cd ..
 
-    - name: Create GitHub Draft Release
+    - name: Set Change Version
+      run: |
+        CHANGEVERSION="${{ github.event.inputs.CHANGEVERSION }}"
+        if [ -z "$CHANGEVERSION" ]; then
+          latest_tag=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/SpotCompiled/SpotveeC/releases/latest | jq -r .tag_name)
+          version=${latest_tag#v}
+          IFS='.' read -r -a parts <<< "$version"
+          patch=$((parts[2]+1))
+          CHANGEVERSION="${parts[0]}.${parts[1]}.$patch"
+        fi
+        echo "CHANGEVERSION=$CHANGEVERSION" >> $GITHUB_ENV
+
+    - name: Run Cyan to patch Spotify
+      run: |
+        Cyan -i "${{ env.spotifypath }}" -o "Build Components/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa" -v ${{ env.CHANGEVERSION }} -f "${{ env.orion }}" "${{ env.swiftprotobuf }}" "${{ env.eevee-arm64 }}" -u -w
+        echo "patchedspotify=Build Components/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa" >> $GITHUB_ENV
+
+    - name: Run Cyan for AltStore resource only
+      run: |
+        Cyan -i "${{ env.spotifypath }}" -o "Build Components/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}_ALTSTORESOURCE_ONLY.ipa" -v ${{ env.CHANGEVERSION }} -b com.yodaluca23.SpotveeC -f "${{ env.orion }}" "${{ env.swiftprotobuf }}" "${{ env.eevee-arm64 }}" -u -w
+        echo "altpatchedspotify=Build Components/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}_ALTSTORESOURCE_ONLY.ipa" >> $GITHUB_ENV
+
+    - name: Create Draft Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: "v${{ env.CHANGEVERSION }}"
         name: "SpotveeC v${{ env.CHANGEVERSION }}"
         draft: true
         body_path: changelog.txt
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Patched IPA files to Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: "v${{ env.CHANGEVERSION }}"
+        files: |
+          ${{ env.patchedspotify }}
+          ${{ env.altpatchedspotify }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
