@@ -128,17 +128,29 @@ jobs:
 
     - name: Download EeveeSpotify .deb
       run: |
+        mkdir -p "Build Components"
         if [ "${{ github.event.inputs.USEACTIONSEEVEE }}" = "false" ]; then
-          eevee_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEETAG }} | jq -r '.assets[] | select(.name | startswith("com.eevee.spotify") and endswith("iphoneos-arm64.deb")).browser_download_url')
+          eevee_url=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEETAG }} \
+            | jq -r '.assets[] | select(.name | startswith("com.eevee.spotify") and endswith("iphoneos-arm64.deb")).browser_download_url')
+          eevee_file=$(basename "$eevee_url")
+          curl -LJO -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$eevee_url"
+          mv "$eevee_file" "Build Components/"
+          echo "eeveespotify=Build Components/$eevee_file" >> $GITHUB_ENV
         else
-          workflow_run_id=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ env.EEVEEREPO }}/actions/workflows/build-swift.yml/runs?status=success&per_page=1" | jq -r '.workflow_runs[0].id')
-          eevee_asset=$(curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ env.EEVEEREPO }}/actions/runs/$workflow_run_id/artifacts" | jq -r '.artifacts[] | select(.name | test("debug|arm.deb") | not) | .archive_download_url')
+          workflow_run_id=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ env.EEVEEREPO }}/actions/workflows/build-swift.yml/runs?status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].id')
+          eevee_asset=$(curl -sL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ env.EEVEEREPO }}/actions/runs/$workflow_run_id/artifacts" \
+            | jq -r '.artifacts[] | select(.name | test("debug|arm.deb") | not) | .archive_download_url')
           curl -LJ -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "$eevee_asset" -o "eeveespotfiyactionsasset.zip"
           unzip -q "eeveespotfiyactionsasset.zip" -d extracted_files
-          eevee_asset=$(find extracted_files -type f -name "*.deb" | head -n1)
+          eevee_file=$(find extracted_files -type f -name "*.deb" | head -n1)
+          eevee_file_name=$(basename "$eevee_file")
+          mv "$eevee_file" "Build Components/"
+          echo "eeveespotify=Build Components/$eevee_file_name" >> $GITHUB_ENV
         fi
-        mv "$eevee_asset" "Build Components/"
-        echo "eeveespotify=$eevee_asset" >> $GITHUB_ENV
 
     - name: Run Cyan to patch Spotify IPA
       run: |
