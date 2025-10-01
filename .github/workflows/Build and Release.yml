@@ -58,8 +58,6 @@ jobs:
       - name: Install Cyan
         run: pipx install --force https://github.com/SpotCompiled/pyzule-rw/archive/main.zip
 
-      # … (EEVEE tag and download steps remain unchanged)
-
       - name: Create Build Components folder
         run: mkdir -p "Build Components"
 
@@ -98,4 +96,34 @@ jobs:
           fi
           rm -f Packages
 
-      # … (the rest of workflow continues unchanged)
+      - name: Patch Spotify IPA
+        run: |
+          # Patch the Spotify IPA using Cyan
+          cyan patch "$spotifypath" --orion "$orion" --output "Build Components/Patched_Spotify.ipa"
+          echo "PATCHED_SPOTIFY=Build Components/Patched_Spotify.ipa" >> $GITHUB_ENV
+
+      - name: Upload Patched IPA as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Patched-Spotify-IPA
+          path: ${{ env.PATCHED_SPOTIFY }}
+
+      - name: Create Draft GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ env.CHANGEVERSION }}"
+          name: "SpotveeC v${{ env.CHANGEVERSION }}"
+          draft: true
+          body: "Patched Spotify IPA built from workflow: ${{ env.WORKFLOWURL }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Patched IPA to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ env.CHANGEVERSION }}"
+          name: "SpotveeC v${{ env.CHANGEVERSION }}"
+          files: ${{ env.PATCHED_SPOTIFY }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
