@@ -116,16 +116,23 @@ jobs:
         echo "altpatchedspotify=${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}_ALTSTORESOURCE_ONLY.ipa" >> $GITHUB_ENV
         echo "AltStore Patched Spotify .ipa Located: ${{ env.altpatchedspotify }}"
 
-    - name: Create Draft Release and Upload Artifacts
+    - name: Create Draft Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: "v${{ env.CHANGEVERSION }}"
         name: "SpotveeC v${{ env.CHANGEVERSION }}"
         draft: true
+        body_path: changelog.txt
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Patched Spotify IPA to Release Artifacts
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: "v${{ env.CHANGEVERSION }}"  # add the tag here
         files: |
           ${{ env.patchedspotify }}
           ${{ env.altpatchedspotify }}
-        body_path: changelog.txt
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
