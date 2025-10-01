@@ -113,34 +113,18 @@ jobs:
           mv "$file" "Build Components/"
           echo "swiftprotobuf=Build Components/$file" >> $GITHUB_ENV
 
-      - name: Patch Spotify IPA
-        run: |
-          Cyan -i "Build Components/br15wj.ipa" \
-               -o "Build Components/SpotveeC.v_v.ipa" \
-               -v "" \
-               -f "" \
-               "Build Components/org.swift.protobuf.swiftprotobuf_1.29.0_iphoneos-arm64.deb" \
-               "Build Components/com.eevee.spotify_6.1.5_iphoneos-arm64.deb" \
-               -u -w
-          echo "patchedspotify=Build Components/SpotveeC.v_v.ipa" >> $GITHUB_ENV
-        shell: /bin/bash -e
-        env:
-          EEVEEVERSION: 
-          CHANGEVERSION: 
-          SPOTURL: https://files.catbox.moe/br15wj.ipa
-          VT_ENABLED: false
-          CATBOXHASH_ENABLED: false
-          WORKFLOWURL: https://github.com/Shouganaii/SpotveeC-personal/actions/runs/18148946985
-          EEVEEREPO: whoeevee/EeveeSpotifyReborn
-          pythonLocation: /Users/runner/hostedtoolcache/Python/3.13.7/arm64
-          PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.13.7/arm64/lib/pkgconfig
-          Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.13.7/arm64
-          Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.13.7/arm64
-          Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.13.7/arm64
-          EEVEETAG: swift6.1.5
-          spotifypath: Build Components/br15wj.ipa
-          eevee-arm64: Build Components/com.eevee.spotify_6.1.5_iphoneos-arm64.deb
-          swiftprotobuf: Build Components/org.swift.protobuf.swiftprotobuf_1.29.0_iphoneos-arm64.deb
+    - name: Run Cyan
+      run: |
+        Cyan -i "${{ env.spotifypath }}" \
+             -o "${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa" \
+             -v ${{ env.CHANGEVERSION }} \
+             -f "${{ env.orion }}" \
+             "${{ env.swiftprotobuf }}" \
+             "${{ env.eevee-arm64 }}" \
+             -u -w
+        echo "patchedspotify=${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa"
+        echo "patchedspotify=${{ env.componentspath }}/SpotveeC.v${{ env.CHANGEVERSION }}_v${{ env.VANILLASPOTIFYVERSION }}.ipa" >> $GITHUB_ENV
+        echo "Patched Spotify .ipa Located: ${{ env.patchedspotify }}"
 
       - name: Upload Release to GitHub
         uses: softprops/action-gh-release@v2
