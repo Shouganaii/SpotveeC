@@ -38,7 +38,6 @@ jobs:
           echo "VT_ENABLED=${{ secrets.VIRUSTOTALKEY != '' }}" >> $GITHUB_ENV
           echo "CATBOXHASH_ENABLED=${{ secrets.CATBOXHASH != '' }}" >> $GITHUB_ENV
           echo "WORKFLOWURL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
-
       - name: Set EeveeSpotify Repo
         run: |
           set -e
@@ -48,7 +47,6 @@ jobs:
             EEVEEREPO="whoeevee/EeveeSpotifyReborn"
           fi
           echo "EEVEEREPO=$EEVEEREPO" >> $GITHUB_ENV
-
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
         with:
@@ -77,7 +75,6 @@ jobs:
             fi
           fi
           echo "EEVEETAG=$EEVEETAG" >> $GITHUB_ENV
-
       - name: Create Build Components folder
         run: mkdir -p "Build Components"
 
@@ -89,7 +86,6 @@ jobs:
           downloaded_file=$(ls -t | head -n1)
           mv "$downloaded_file" "Build Components/"
           echo "spotifypath=Build Components/$downloaded_file" >> $GITHUB_ENV
-
       - name: Upload Spotify IPA to VirusTotal
         if: ${{ env.VT_ENABLED == 'true' }}
         uses: crazy-max/ghaction-virustotal@v4
@@ -126,7 +122,6 @@ jobs:
           rm -f Packages
           echo "orion=$orion" >> $GITHUB_ENV
           echo "ORIONVERSION=$ORIONVERSION" >> $GITHUB_ENV
-
       - name: Upload Orion to VirusTotal
         if: ${{ env.VT_ENABLED == 'true' }}
         uses: crazy-max/ghaction-virustotal@v4
@@ -145,12 +140,12 @@ jobs:
           EEVEETAG: ${{ env.EEVEETAG }}
         run: |
           set -e
-          eevee_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/$EEVEETAG | jq -r '.assets[] | select(.name | endswith("iphoneos-arm64.deb")).browser_download_url')
-          echo "Downloading From: $eevee_asset"
-          curl -LJO "$eevee_asset"
-          downloaded_file=$(ls -t | head -n1)
-          mv "$downloaded_file" "Build Components/"
-          echo "eevee=Build Components/$downloaded_file" >> $GITHUB_ENV
+	eevee_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEETAG }} | jq -r '.assets[] | select(.name | startswith("com.eevee.spotify") and endswith("iphoneos-arm64.deb")).browser_download_url')
+echo "Downloading From: $eevee_asset"
+curl -LJO "$eevee_asset"
+downloaded_file=$(ls -t | head -n1)
+mv "$downloaded_file" "Build Components/"
+echo "eevee-arm64=Build Components/$downloaded_file" >> $GITHUB_ENV
 
       - name: Download EeveeSpotify .deb (Artifacts)
         if: ${{ github.event.inputs.USEACTIONSEEVEE == 'true' }}
@@ -166,7 +161,6 @@ jobs:
           mv "$downloaded_file" "Build Components/"
           rm -rf extracted_files
           echo "eevee=Build Components/$(basename "$downloaded_file")" >> $GITHUB_ENV
-
       - name: Upload EeveeSpotify to VirusTotal
         if: ${{ env.VT_ENABLED == 'true' }}
         uses: crazy-max/ghaction-virustotal@v4
@@ -191,7 +185,6 @@ jobs:
             CHANGEVERSION="${{ github.event.inputs.CHANGEVERSION }}"
           fi
           echo "CHANGEVERSION=$CHANGEVERSION" >> $GITHUB_ENV
-
       - name: Create Draft Release
         uses: softprops/action-gh-release@v2
         with:
