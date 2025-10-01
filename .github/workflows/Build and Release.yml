@@ -1,6 +1,9 @@
 name: Build SpotveeC
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -12,50 +15,47 @@ jobs:
       EEVEETAG: swift6.1.5
       VT_ENABLED: false
       CATBOXHASH_ENABLED: false
-      WORKFLOWURL: ${{ github.run_url }}
+      WORKFLOWURL: ${{ github.event.workflow_run.html_url }}
+      pythonLocation: /Users/runner/hostedtoolcache/Python/3.13.7/arm64
+      PKG_CONFIG_PATH: /Users/runner/hostedtoolcache/Python/3.13.7/arm64/lib/pkgconfig
+      Python_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.13.7/arm64
+      Python2_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.13.7/arm64
+      Python3_ROOT_DIR: /Users/runner/hostedtoolcache/Python/3.13.7/arm64
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.13
-
       - name: Create Build Components folder
         run: mkdir -p "Build Components"
 
-      - name: Download Orion Packages list
+      - name: Download Orion .deb from Chariz
         run: |
           curl -sSL https://repo.chariz.com/Packages -o Packages
-          ORIONFILE=$(awk '/Filename:.*Orion.*\.deb/ {print $2}' Packages | head -n1)
-          curl -LJO "https://repo.chariz.com/$ORIONFILE"
-          mv "$ORIONFILE" "Build Components/"
+
+          # Extract Orion .deb filename safely
+          ORIONFILE=$(grep -i 'Filename:.*Orion.*\.deb' Packages | head -n1 | awk '{print $2}')
+
+          # Fail early if no file found
+          if [ -z "$ORIONFILE" ]; then
+            echo "Error: Could not find Orion .deb file in Packages"
+            exit 1
+          fi
+
+          # Download to Build Components
+          curl -L "https://repo.chariz.com/$ORIONFILE" -o "Build Components/$ORIONFILE"
+
+          # Export to GitHub env
           echo "orion=Build Components/$ORIONFILE" >> $GITHUB_ENV
 
-      - name: Download Eevee IPA
+      - name: Download Spotvee IPA
         run: |
-          curl -L $SPOTURL -o "Build Components/spotvee.ipa"
-          echo "spotipapath=Build Components/spotvee.ipa" >> $GITHUB_ENV
+          curl -L "${SPOTURL}" -o "Build Components/spotvee.ipa"
+          echo "spotifypath=Build Components/spotvee.ipa" >> $GITHUB_ENV
 
-      - name: Cyan patch process
+      - name: Print Environment Variables
         run: |
-          # Example Cyan patch command
-          echo "Running Cyan patch..."
-          # Add your real Cyan patch commands here
-          # e.g., python3 cyan_patch.py ${{ env.spotipapath }}
+          echo "Orion file: ${{ env.orion }}"
+          echo "Spotvee IPA path: ${{ env.spotifypath }}"
 
-      - name: Eevee build process
-        run: |
-          echo "Building Eevee from repo..."
-          git clone https://github.com/${{ env.EEVEEREPO }} EeveeRepo
-          cd EeveeRepo
-          git checkout ${{ env.EEVEETAG }}
-          # Add your Eevee build steps here
-          # e.g., ./build.sh
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: SpotveeC-Build
-          path: Build Components/
+      # Add additional build, patch, or packaging steps here
