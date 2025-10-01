@@ -134,9 +134,9 @@ jobs:
         if: ${{ env.VT_ENABLED == 'true' }}
         run: echo "VTORION=${{ steps.vt-orion.outputs.analysis }}" >> $GITHUB_ENV
 
-    - name: Download EeveeSpotify .deb file from releases
-      if: ${{ github.event.inputs.USEACTIONSEEVEE == 'false' }}
-      run: |
+      - name: Download EeveeSpotify .deb file from releases
+        if: ${{ github.event.inputs.USEACTIONSEEVEE == 'false' }}
+        run: |
         eevee_asset=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ env.EEVEEREPO }}/releases/tags/${{ env.EEVEETAG }} | jq -r '.assets[] | select(.name | startswith("com.eevee.spotify") and endswith("iphoneos-arm64.deb")).browser_download_url')
         echo "Downloading From: $eevee_asset"
         # Download the file using curl
